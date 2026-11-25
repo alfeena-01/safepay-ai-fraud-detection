@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database.connection import get_db
 from app.database.models import Alert, RiskAssessment, Transaction
 from app.database.schemas import RiskRead, TransactionRead
+from app.services.anomaly_detection_engine.model import ModelUnavailableError
 from app.services.anomaly_detection_engine.risk_scoring import assess_transaction
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -55,7 +56,10 @@ def analyze_transaction(transaction_id: int, db: Session = Depends(get_db)):
     transaction = db.get(Transaction, transaction_id)
     if transaction is None:
         raise HTTPException(status_code=404, detail="Transaction not found.")
-    result = assess_transaction(transaction)
+    try:
+        result = assess_transaction(transaction)
+    except ModelUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     assessment = db.scalar(select(RiskAssessment).where(RiskAssessment.transaction_id == transaction.id))
     if assessment is None:
         assessment = RiskAssessment(transaction_id=transaction.id, **result)
@@ -63,7 +67,7 @@ def analyze_transaction(transaction_id: int, db: Session = Depends(get_db)):
     else:
         for key, value in result.items():
             setattr(assessment, key, value)
-    if result["overall_risk_score"] >= 70:
+    if result["risk_level"] == "high":
         existing_alert = db.scalar(select(Alert).where(Alert.transaction_id == transaction.id))
         if existing_alert is None:
             db.add(Alert(

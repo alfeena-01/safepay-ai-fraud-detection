@@ -3,11 +3,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import app.api.transactions as transactions_api
 from app.database.connection import Base, get_db
 from app.main import app
+from app.services.anomaly_detection_engine.model import ModelUnavailableError
 
 
-def build_client():
+def build_client(monkeypatch=None):
     test_engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -24,11 +26,26 @@ def build_client():
             db.close()
 
     app.dependency_overrides[get_db] = override_db
+    if monkeypatch is not None:
+        monkeypatch.setattr(
+            transactions_api,
+            "assess_transaction",
+            lambda transaction: {
+                "fraud_probability": 0.9,
+                "anomaly_score": 0.9,
+                "graph_risk": 0.0,
+                "overall_risk_score": 90.0,
+                "risk_level": "high",
+                "explanation": "Test assessment.",
+                "recommended_action": "Escalate for analyst review",
+                "model_version": "test-model-v1",
+            },
+        )
     return TestClient(app), test_engine
 
 
-def test_dataset_transaction_risk_case_report_workflow():
-    client, test_engine = build_client()
+def test_dataset_transaction_risk_case_report_workflow(monkeypatch):
+    client, test_engine = build_client(monkeypatch)
     csv_content = (
         "transactionId,step,type,amount,nameOrig,oldbalanceOrg,newbalanceOrig,"
         "nameDest,oldbalanceDest,newbalanceDest,isFraud\n"
@@ -94,6 +111,53 @@ def test_invalid_dataset_headers_are_rejected():
     )
     assert response.status_code == 422
     assert "Missing required CSV columns" in response.json()["detail"]
+    client.close()
+    test_engine.dispose()
+    app.dependency_overrides.clear()
+
+
+def test_analysis_reports_missing_model_as_service_unavailable(monkeypatch):
+    client, test_engine = build_client()
+
+    def missing_model(_transaction):
+        raise ModelUnavailableError("Install the trained model.")
+
+    monkeypatch.setattr(transactions_api, "assess_transaction", missing_model)
+    uploaded = client.post(
+        "/api/dataset/upload",
+        files={"file": (
+            "sample.csv",
+            "type,amount,nameOrig,nameDest\nTRANSFER,100,acct-a,acct-b\n",
+            "text/csv",
+        )},
+    )
+    transaction_id = client.get("/api/transactions/").json()[0]["id"]
+    response = client.post(f"/api/transactions/{transaction_id}/analyze")
+    assert uploaded.status_code == 200
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Install the trained model."
+    client.close()
+    test_engine.dispose()
+    app.dependency_overrides.clear()
+
+
+def test_analysis_endpoint_returns_trained_model_explanation():
+    client, test_engine = build_client()
+    uploaded = client.post(
+        "/api/dataset/upload",
+        files={"file": (
+            "sample.csv",
+            "type,amount,nameOrig,nameDest,step,oldbalanceOrg,newbalanceOrig,"
+            "oldbalanceDest,newbalanceDest\nTRANSFER,1250,acct-a,acct-b,3,2000,750,20,1270\n",
+            "text/csv",
+        )},
+    )
+    transaction_id = client.get("/api/transactions/").json()[0]["id"]
+    response = client.post(f"/api/transactions/{transaction_id}/analyze")
+    assert uploaded.status_code == 200
+    assert response.status_code == 200
+    assert response.json()["model_version"] == "safepay-logistic-paysim-v1"
+    assert "Top model signals" in response.json()["explanation"]
     client.close()
     test_engine.dispose()
     app.dependency_overrides.clear()

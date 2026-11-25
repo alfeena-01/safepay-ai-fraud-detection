@@ -1,6 +1,6 @@
 # SafePay — Financial Fraud Detection Platform
 
-SafePay is a transaction monitoring and investigation workspace. This repository includes a FastAPI service, SQLAlchemy data model, and a React dashboard. The risk-scoring endpoint currently uses a clearly labeled demo heuristic; it is an integration placeholder, not a trained or calibrated fraud model.
+SafePay is a transaction monitoring and investigation workspace. This repository includes a FastAPI service, SQLAlchemy data model, and a React dashboard. Transaction risk analysis uses an explainable logistic model trained and evaluated on synthetic PaySim data; its results are not production validated.
 
 ## Requirements
 
@@ -22,6 +22,18 @@ python -m uvicorn app.main:app --reload
 ```
 
 The local API is at `http://127.0.0.1:8000`; OpenAPI/Swagger documentation is at `/docs`, and health is at `/health`.
+
+### Train the risk model
+
+Before running transaction analysis, train the explainable logistic-regression model with a labeled PaySim CSV. From the `backend` directory, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m ml.train_explainable --dataset "C:\path\to\PS_20174392719_1491204439457_log.csv"
+```
+
+Training reads the CSV in chunks, uses `isFraud` as the label, samples only the training negatives, and preserves natural class prevalence in separate calibration, validation, and test splits. It saves the model under `backend/ml/saved_models/` and held-out metrics in `evaluation.json`. The account IDs and `isFlaggedFraud` field are excluded from model features. The risk page shows the top model-feature contributions for each assessment.
+
+The provided PaySim data is synthetic. Its held-out metrics are educational evaluation, not evidence that the model is suitable for real-world fraud decisions. Do not expose this development service to untrusted networks or rely on its scores for operational decisions.
 
 To use PostgreSQL, create a database named `safepay_db`, copy the root `.env.example` to `.env`, and set `DATABASE_URL` to your own local PostgreSQL username/password, for example:
 

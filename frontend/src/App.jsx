@@ -110,7 +110,7 @@ function DashboardPage() {
           <div className="stat-grid">
             <StatCard label="Total transactions" value={metrics.total_transactions.toLocaleString()} caption={`${amount(metrics.total_amount)} total value`} />
             <StatCard label="Fraud labels" value={metrics.fraud_transactions.toLocaleString()} caption={`${percentage(metrics.fraud_rate)} of uploaded rows`} accent="cyan" />
-            <StatCard label="High-risk transactions" value={metrics.high_risk_transactions.toLocaleString()} caption="Demo analyses requiring review" accent="orange" />
+            <StatCard label="High-risk transactions" value={metrics.high_risk_transactions.toLocaleString()} caption="Model estimates requiring review" accent="orange" />
             <StatCard label="Open alerts" value={metrics.open_alerts.toLocaleString()} caption="Awaiting analyst attention" accent="red" />
           </div>
           <div className="panel-grid">
@@ -119,9 +119,9 @@ function DashboardPage() {
               <ActivityChart data={metrics.activity} />
             </article>
             <article className="panel">
-              <div className="panel-heading"><div><h2>Risk distribution</h2><p>Saved demo risk assessments</p></div></div>
+              <div className="panel-heading"><div><h2>Risk distribution</h2><p>Saved model risk assessments</p></div></div>
               <RiskDistribution data={metrics.risk_distribution} />
-              <div className="demo-banner">Demo heuristic results are illustrative, not model predictions.</div>
+              <div className="demo-banner">PaySim-based estimates are illustrative, not production validated.</div>
             </article>
           </div>
         </>}
@@ -249,17 +249,15 @@ function RiskPage({ initialTransaction }) {
   return (
     <section>
       <PageTitle eyebrow="DECISION SUPPORT" title="Risk analysis" detail="Inspect risk signals and recommended review actions for a transaction." />
-      <div className="demo-banner prominent">Sample scoring only — demo heuristic, not a trained or calibrated fraud model.</div>
-      <div className="panel analysis-picker"><label className="select-field"><span>Transaction</span><select value={selected} onChange={(event) => { setSelected(event.target.value); setRisk(null); }}><option value="">Choose transaction</option>{rows.map((row) => <option key={row.id} value={row.id}>{row.transaction_id} · {row.transaction_type} · {amount(row.amount)}</option>)}</select></label><button className="button primary" onClick={analyze} disabled={!selected || analyzing}>{analyzing ? "Analyzing…" : "Run demo analysis"}</button></div>
+      <div className="demo-banner prominent">Trained and evaluated on synthetic PaySim data. Estimates are illustrative and are not production validated.</div>
+      <div className="panel analysis-picker"><label className="select-field"><span>Transaction</span><select value={selected} onChange={(event) => { setSelected(event.target.value); setRisk(null); }}><option value="">Choose transaction</option>{rows.map((row) => <option key={row.id} value={row.id}>{row.transaction_id} · {row.transaction_type} · {amount(row.amount)}</option>)}</select></label><button className="button primary" onClick={analyze} disabled={!selected || analyzing}>{analyzing ? "Analyzing…" : "Run model analysis"}</button></div>
       {loading && <div className="message"><span className="spinner" /> Loading transactions…</div>}
       {error && <div className="message error-message" role="alert">{error}</div>}
       {!loading && !rows.length && <div className="empty-state panel">Upload transactions before running risk analysis.</div>}
       {risk && <div className="panel risk-result">
         <div className="risk-score-head"><div><p className="eyebrow">OVERALL RISK SCORE</p><div className={`score-value ${risk.risk_level}`}>{risk.overall_risk_score}<span>/100</span></div></div><span className={`status-pill ${risk.risk_level}`}>{risk.risk_level} risk</span></div>
         <div className="score-grid">
-          <ScoreBar label="Fraud probability" value={risk.fraud_probability * 100} display={percentage(risk.fraud_probability)} />
-          <ScoreBar label="Anomaly score" value={risk.anomaly_score * 100} display={percentage(risk.anomaly_score)} />
-          <ScoreBar label="Graph risk" value={risk.graph_risk * 100} display={percentage(risk.graph_risk)} />
+          <ScoreBar label="Calibrated fraud probability" value={risk.fraud_probability * 100} display={percentage(risk.fraud_probability)} />
         </div>
         <div className="explanation-box"><h3>Risk explanation</h3><p>{risk.explanation}</p><h3>Recommended action</h3><p>{risk.recommended_action}</p></div>
         <small className="model-footnote">Analysis source: {risk.model_version} · {displayDate(risk.assessed_at)}</small>
