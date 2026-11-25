@@ -438,15 +438,31 @@ function ReportsPage() {
 export default function App() {
   const [activePage, setActivePage] = useState("dashboard");
   const [riskTransaction, setRiskTransaction] = useState("");
+  const [logoData, setLogoData] = useState("");
   const active = navigation.find((item) => item.id === activePage);
   function openRisk(id) {
     setRiskTransaction(String(id));
     setActivePage("risk");
   }
+  function loadLogo(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => setLogoData(String(reader.result));
+    reader.readAsDataURL(file);
+  }
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><div className="brand-mark">S</div><div><strong>SafePay</strong><small>FRAUD INTELLIGENCE</small></div></div>
+        <div className="brand">
+          <label className="brand-logo-slot" title="Upload your logo">
+            {logoData ? <img src={logoData} alt="Custom SafePay logo" /> : <span>S</span>}
+            <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={loadLogo} />
+            <b>{logoData ? "Change" : "Logo"}</b>
+          </label>
+          <div><strong>SafePay</strong><small>FRAUD INTELLIGENCE</small></div>
+        </div>
         <div className="nav-caption">WORKSPACE</div>
         <nav>{navigation.map((item) => <button key={item.id} aria-label={item.label} title={item.label} onClick={() => setActivePage(item.id)} className={`nav-item ${activePage === item.id ? "active" : ""}`}><span className="nav-mark">{item.mark}</span><span>{item.label}</span>{activePage === item.id && <i />}</button>)}</nav>
         <div className="sidebar-bottom"><span className="online-dot" /><span>Monitoring workspace</span><small>SafePay · Local</small></div>
