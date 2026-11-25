@@ -4,18 +4,11 @@ __pycache__/
 .pytest_cache/
 .coverage
 
-# Environment files
 .env
 .venv/
 backend/.venv/
-
-# Frontend
 frontend/node_modules/
 frontend/dist/
-
-# Database
 backend/safepay.db
-
-# Data files
 data/raw/*.csv
 backend/data/raw/*.csv

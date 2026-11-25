@@ -6,7 +6,10 @@ __pycache__/
 
 # Environment files
 .env
+
+# Virtual environments
 .venv/
+venv/
 backend/.venv/
 
 # Frontend
@@ -19,3 +22,11 @@ backend/safepay.db
 # Data files
 data/raw/*.csv
 backend/data/raw/*.csv
+backend/data/samples/*.csv
+
+# IDE files
+.vscode/
+
+# Temporary files
+*.log
+.DS_Store
