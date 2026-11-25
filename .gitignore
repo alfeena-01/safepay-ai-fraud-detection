@@ -1,22 +1,22 @@
-# Python cache
+# Python cache files
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
-# Virtual environment
+# Virtual environments
 .venv/
 venv/
 
-# Dataset files
-backend/data/raw/*.csv
-
 # Environment variables
 .env
+
+# Dataset files
+backend/data/raw/*.csv
+backend/data/samples/*.csv
 
 # IDE files
 .vscode/
 
 # Temporary files
 *.log
-.DS_Storebackend/data/samples/*.csv
-
-backend/data/samples/*.csv
+.DS_Store
