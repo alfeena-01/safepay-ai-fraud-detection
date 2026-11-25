@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+venv/
+
+# Dataset files
+backend/data/raw/*.csv
+
+# Environment variables
+.env
+
+# IDE files
+.vscode/
+
+# Temporary files
+*.log
+.DS_Storebackend/data/samples/*.csv
+
+backend/data/samples/*.csv
