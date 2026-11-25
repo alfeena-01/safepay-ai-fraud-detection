@@ -2,15 +2,25 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.coverage
+
+# Environment files
+.env
 
 # Virtual environments
 .venv/
 venv/
+backend/.venv/
 
-# Environment variables
-.env
+# Frontend
+frontend/node_modules/
+frontend/dist/
 
-# Dataset files
+# Database
+backend/safepay.db
+
+# Data files
+data/raw/*.csv
 backend/data/raw/*.csv
 backend/data/samples/*.csv
 
