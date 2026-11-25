@@ -7,7 +7,7 @@ from app.services.anomaly_detection_engine.model import (
     build_feature_vector,
     transaction_features,
 )
-from ml.train import REQUIRED_COLUMNS, evaluate
+from ml.train_explainable import REQUIRED_COLUMNS, evaluate
 
 
 def test_model_and_api_encode_the_same_transaction_features():

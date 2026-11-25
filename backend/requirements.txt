@@ -1,14 +1,13 @@
-# Python cache files
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.coverage
-
-.env
-.venv/
-backend/.venv/
-frontend/node_modules/
-frontend/dist/
-backend/safepay.db
-data/raw/*.csv
-backend/data/raw/*.csv
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+SQLAlchemy>=2.0,<3.0
+psycopg[binary]>=3.2,<4.0
+pydantic-settings>=2.5,<3.0
+python-multipart>=0.0.12
+pytest>=8.0
+httpx>=0.27
+numpy>=1.26,<3.0
+pandas>=2.2,<4.0
+scikit-learn>=1.5,<2.0
+joblib>=1.4,<2.0
+networkx>=3.3,<4.0
