@@ -12,7 +12,15 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 def dashboard_metrics(db: Session = Depends(get_db)):
     total = db.scalar(select(func.count(Transaction.id))) or 0
     amount = db.scalar(select(func.coalesce(func.sum(Transaction.amount), 0.0))) or 0.0
-    fraud = db.scalar(select(func.count(Transaction.id)).where(Transaction.is_fraud.is_(True))) or 0
+    labeled_transactions = db.scalar(
+        select(func.count(Transaction.id)).where(Transaction.label_known.is_(True))
+    ) or 0
+    fraud = db.scalar(
+        select(func.count(Transaction.id)).where(
+            Transaction.label_known.is_(True),
+            Transaction.is_fraud.is_(True),
+        )
+    ) or 0
     high_risk = db.scalar(
         select(func.count(RiskAssessment.id)).where(RiskAssessment.risk_level == "high")
     ) or 0
@@ -32,7 +40,8 @@ def dashboard_metrics(db: Session = Depends(get_db)):
         "total_transactions": total,
         "total_amount": round(amount, 2),
         "fraud_transactions": fraud,
-        "fraud_rate": round(fraud / total, 6) if total else 0.0,
+        "fraud_labeled_transactions": labeled_transactions,
+        "fraud_rate": round(fraud / labeled_transactions, 6) if labeled_transactions else 0.0,
         "high_risk_transactions": high_risk,
         "open_alerts": open_alerts,
         "activity": [

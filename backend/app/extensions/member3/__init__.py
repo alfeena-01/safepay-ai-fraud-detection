@@ -1,0 +1,1 @@
+# SafePay integrated extension package.

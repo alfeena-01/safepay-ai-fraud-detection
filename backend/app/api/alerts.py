@@ -10,10 +10,14 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 @router.get("/")
 def list_alerts(status: str | None = Query(default=None, pattern="^(open|acknowledged|resolved)$"),
+                limit: int = Query(default=10, ge=1, le=100),
                 db: Session = Depends(get_db)):
-    query = select(Alert).options(joinedload(Alert.transaction)).order_by(Alert.id.desc())
+    query = select(Alert).options(
+        joinedload(Alert.transaction).joinedload(Transaction.risk_assessment)
+    ).order_by(Alert.id.desc())
     if status:
         query = query.where(Alert.status == status)
+    query = query.limit(limit)
     return [{
         "id": alert.id,
         "transaction_id": alert.transaction_id,
@@ -23,6 +27,22 @@ def list_alerts(status: str | None = Query(default=None, pattern="^(open|acknowl
         "severity": alert.severity,
         "status": alert.status,
         "created_at": alert.created_at,
+        "risk_level": (
+            alert.transaction.risk_assessment.risk_level
+            if alert.transaction.risk_assessment else None
+        ),
+        "fraud_probability": (
+            alert.transaction.risk_assessment.fraud_probability
+            if alert.transaction.risk_assessment else None
+        ),
+        "model_classification": (
+            alert.transaction.risk_assessment.model_classification
+            if alert.transaction.risk_assessment else None
+        ),
+        "explanation": (
+            alert.transaction.risk_assessment.explanation
+            if alert.transaction.risk_assessment else "Risk assessment unavailable."
+        ),
     } for alert in db.scalars(query).unique().all()]
 
 

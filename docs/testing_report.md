@@ -1,22 +1,28 @@
 # Testing report
 
-## Automated coverage
+## Automated verification in the integration workspace
 
-`backend/tests/test_api.py` exercises CSV ingestion and duplicate handling, transaction search, risk analysis and alert creation, case creation/notes/status updates, report generation, dashboard metrics, account network data, malformed CSV headers, and invalid case requests.
+- **44 backend tests passed** using `PYTHONPATH=backend python -m pytest -q backend/tests`.
+- Python syntax compilation passed for `backend/app`.
+- JSX/JavaScript syntax transpilation passed for the main React app, chatbot component, frontend entry point and API client.
+- Backend API tests cover CSV ingestion/validation, duplicate handling, transaction search, risk analysis, alert creation, case/report workflows, dashboard metrics, depth-2 account traversal, authentication, password hashing, token signature checks and role restrictions.
+- Chatbot tests cover safe context handling and missing/available transaction details.
 
-Run from `backend/`:
+## Frontend production build
+
+Not verified in this environment. Online `npm ci` timed out and offline installation could not retrieve an uncached dependency. On the Windows development machine run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+cd frontend
+npm ci
+npm run build
 ```
 
-SQLite in-memory databases are used for isolated API tests; the same SQLAlchemy models are used with PostgreSQL when configured.
+## Not run / still required
 
-Latest local validation: **4 backend tests passed** and `npm run build` completed successfully. The running SQLite-backed API returned a healthy status and dashboard metrics, and the Vite page loaded successfully. npm audit reported no known package vulnerabilities.
+- PostgreSQL connectivity and shared-team database validation.
+- Browser-based end-to-end testing across login, upload, model analysis, graph, chatbot, cases and reports.
+- Production security review, penetration testing, rate limiting, MFA and token revocation.
+- Ollama-backed chatbot test (the rules-based safe fallback is the default).
 
-## Manual checks still needed
-
-- Connect to the local PostgreSQL 18 service after the developer sets a private `DATABASE_URL`; service availability was confirmed, but no database credentials were available to test a PostgreSQL connection.
-- Upload and inspect the project owner's real CSV; this is intentionally pending so the file is not guessed or fabricated.
-- Confirm results in the browser after the frontend is built and the API is running.
-- Test database-unavailable behavior and the final full workflow in the target environment.
+Use synthetic or authorised test data. The supplied PaySim model is educational and its outputs are decision-support signals, not proof of fraud.

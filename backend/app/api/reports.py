@@ -44,7 +44,14 @@ def create_report(payload: ReportCreate, db: Session = Depends(get_db)):
             summary.extend([
                 f"Transaction: {transaction.transaction_id}",
                 f"Type and amount: {transaction.transaction_type} / {transaction.amount:.2f}",
-                f"Recorded fraud label: {'yes' if transaction.is_fraud else 'no'}",
+                f"Ground-truth label: "
+                f"{'fraud' if transaction.label_known and transaction.is_fraud else 'legitimate' if transaction.label_known else 'unknown'}",
+                (
+                    f"Model estimate: {risk.model_classification} "
+                    f"({risk.fraud_probability:.1%} fraud probability; "
+                    f"{risk.classification_threshold:.1%} threshold)"
+                    if risk else "Model estimate: not yet performed."
+                ),
                 f"Risk assessment: {risk.risk_level} ({risk.overall_risk_score:.1f}/100)"
                 if risk else "Risk assessment: not yet performed.",
             ])

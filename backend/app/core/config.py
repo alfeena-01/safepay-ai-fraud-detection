@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./safepay.db"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     max_upload_bytes: int = 1024 * 1024 * 1024
+    secret_key: str = ""
+    access_token_ttl_seconds: int = 28800
+    admin_email: str = ""
+    admin_password: str = ""
+    admin_name: str = "SafePay Administrator"
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[3] / ".env",

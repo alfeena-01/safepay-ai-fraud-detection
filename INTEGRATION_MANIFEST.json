@@ -1,0 +1,15 @@
+{
+  "base": "SafePay (2).zip",
+  "added_sources": [
+    "SafePay1.zip",
+    "member_3 (2).zip",
+    "SafePay_AI_Chatbot(2).zip"
+  ],
+  "notes": [
+    "Original SafePay project retained as the base.",
+    "Member 3 detectors copied and exposed through POST /api/member3/assess.",
+    "SafePay1 source retained in a namespaced extension folder for safe adaptation.",
+    "Main SafePay chatbot frontend/API retained; chatbot backend reference retained separately.",
+    "Virtual environments, node_modules, Python caches and duplicate 470 MB SafePay1 CSV excluded."
+  ]
+}

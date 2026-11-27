@@ -1,0 +1,55 @@
+{
+  "model_version": "safepay-logistic-paysim-v1",
+  "dataset": "PS_20174392719_1491204439457_log.csv",
+  "dataset_rows": 6362620,
+  "label_column": "isFraud",
+  "train_negative_sample_rate": 0.05,
+  "seed": 42,
+  "splits": {
+    "rows": 6362620,
+    "train_rows": 4454409,
+    "train_rows_sampled": 227691,
+    "train_fraud_rows": 5794,
+    "calibration_rows": 636168,
+    "calibration_fraud_rows": 810,
+    "validation_rows": 635099,
+    "validation_fraud_rows": 842,
+    "test_rows": 636944,
+    "test_fraud_rows": 767
+  },
+  "calibration": {
+    "rows": 636168,
+    "fraud_rows": 810,
+    "intercept": 6.403933793412644,
+    "slope": 2.314637509758942
+  },
+  "validation": {
+    "average_precision": 0.6077996124383633,
+    "roc_auc": 0.9792727156686528,
+    "brier_score": 0.0007380803181872538,
+    "threshold": 0.14135533417849686,
+    "precision": 0.6538461538461539,
+    "recall": 0.5451306413301663,
+    "f1": 0.594559585492228,
+    "false_positive_rate": 0.0003831254523008812,
+    "true_positives": 459,
+    "false_positives": 243,
+    "false_negatives": 383,
+    "true_negatives": 634014
+  },
+  "test": {
+    "average_precision": 0.6086453484364525,
+    "roc_auc": 0.9777218958392634,
+    "brier_score": 0.0006693050807500821,
+    "threshold": 0.14135533417849686,
+    "precision": 0.6268882175226587,
+    "recall": 0.5410691003911343,
+    "f1": 0.5808257522743178,
+    "false_positive_rate": 0.00038825672729444794,
+    "true_positives": 415,
+    "false_positives": 247,
+    "false_negatives": 352,
+    "true_negatives": 635930
+  },
+  "notes": "Random row-level split; class prevalence preserved in calibration, validation, and test. Threshold selected by validation F1. Synthetic PaySim results are not production evidence."
+}

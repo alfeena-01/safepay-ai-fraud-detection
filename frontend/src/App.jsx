@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "./services/api.js";
+import SafePayChatbot from "./components/SafePayChatbot.jsx";
 
 const navigation = [
   { id: "dashboard", label: "Dashboard", mark: "OV" },
@@ -37,6 +38,72 @@ function Message({ error, loading, children }) {
   if (loading) return <div className="message"><span className="spinner" /> Loading SafePay data…</div>;
   if (error) return <div className="message error-message" role="alert">{error}</div>;
   return children;
+}
+
+function AuthenticationPage({ onAuthenticated }) {
+  const [mode, setMode] = useState("login");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      if (mode === "register") {
+        await api.register({ email, full_name: fullName, password });
+      }
+      const response = await api.login({ email, password });
+      sessionStorage.setItem("safepay_access_token", response.access_token);
+      onAuthenticated(response.user);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="auth-screen">
+      <form className="auth-card" onSubmit={submit}>
+        <div className="auth-brand">
+          <span>S</span>
+          <div><strong>SafePay</strong><small>FRAUD INTELLIGENCE</small></div>
+        </div>
+        <h1>{mode === "login" ? "Secure sign in" : "Create analyst account"}</h1>
+        <p className="muted">Access the transaction investigation workspace.</p>
+        {mode === "register" && (
+          <label>
+            Full name
+            <input name="name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} minLength={2} maxLength={160} required />
+          </label>
+        )}
+        <label>
+          Email
+          <input name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck="false" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        </label>
+        <label>
+          Password
+          <input name="password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} minLength={mode === "register" ? 10 : 1} maxLength={128} required />
+        </label>
+        {error && <div className="message error-message" role="alert">{error}</div>}
+        <button className="primary-button auth-submit" type="submit" disabled={submitting}>
+          {submitting ? "Please wait…" : mode === "login" ? "Sign in" : "Register"}
+        </button>
+        <button
+          className="auth-switch"
+          type="button"
+          onClick={() => { setError(""); setMode(mode === "login" ? "register" : "login"); }}
+        >
+          {mode === "login" ? "Create a new analyst account" : "Already have an account? Sign in"}
+        </button>
+        <p className="auth-note">Use authorized synthetic or test data only. Risk scores are decision support, not production-grade findings.</p>
+      </form>
+    </main>
+  );
 }
 
 function StatCard({ label, value, caption, accent = "blue" }) {
@@ -97,20 +164,62 @@ function RiskDistribution({ data = [] }) {
 
 function DashboardPage() {
   const [metrics, setMetrics] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [liveTransactions, setLiveTransactions] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
-    api.dashboard().then(setMetrics).catch((reason) => setError(reason.message)).finally(() => setLoading(false));
-  }, []);
+    let active = true;
+    async function refresh() {
+      try {
+        const [nextMetrics, nextAlerts, nextTransactions] = await Promise.all([
+          api.dashboard(),
+          api.alerts(5),
+          api.liveTransactions(5),
+        ]);
+        if (active) {
+          setMetrics(nextMetrics);
+          setAlerts(nextAlerts);
+          setLiveTransactions(nextTransactions);
+          setUpdatedAt(new Date());
+          setError("");
+        }
+      } catch (reason) {
+        if (active) setError(reason.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [refreshKey]);
+
+  async function updateAlert(alertId, status) {
+    try {
+      await api.updateAlert(alertId, status);
+      setRefreshKey((key) => key + 1);
+    } catch (reason) {
+      setError(reason.message);
+    }
+  }
+
   return (
     <section>
-      <PageTitle eyebrow="OVERVIEW" title="Dashboard" detail="A live view of transactions, emerging risk, and investigation activity." />
+      <PageTitle eyebrow="OVERVIEW" title="Dashboard" detail="A live view of transactions, emerging risk, and investigation activity."
+        action={<button className="button secondary" onClick={() => setRefreshKey((key) => key + 1)}>Refresh now</button>} />
       <Message loading={loading} error={error}>
         {metrics && <>
+          <p className="muted small live-updated">Auto-refreshes every 5 seconds{updatedAt ? ` · Updated ${displayDate(updatedAt)}` : ""}</p>
           <div className="stat-grid">
             <StatCard label="Total transactions" value={metrics.total_transactions.toLocaleString()} caption={`${amount(metrics.total_amount)} total value`} />
-            <StatCard label="Fraud labels" value={metrics.fraud_transactions.toLocaleString()} caption={`${percentage(metrics.fraud_rate)} of uploaded rows`} accent="cyan" />
-            <StatCard label="High-risk transactions" value={metrics.high_risk_transactions.toLocaleString()} caption="Demo analyses requiring review" accent="orange" />
+            <StatCard label="Fraud labels" value={metrics.fraud_transactions.toLocaleString()} caption={`${percentage(metrics.fraud_rate)} of ${metrics.fraud_labeled_transactions.toLocaleString()} labeled CSV rows`} accent="cyan" />
+            <StatCard label="High-risk transactions" value={metrics.high_risk_transactions.toLocaleString()} caption="Model estimates requiring review" accent="orange" />
             <StatCard label="Open alerts" value={metrics.open_alerts.toLocaleString()} caption="Awaiting analyst attention" accent="red" />
           </div>
           <div className="panel-grid">
@@ -119,9 +228,38 @@ function DashboardPage() {
               <ActivityChart data={metrics.activity} />
             </article>
             <article className="panel">
-              <div className="panel-heading"><div><h2>Risk distribution</h2><p>Saved demo risk assessments</p></div></div>
+              <div className="panel-heading"><div><h2>Risk distribution</h2><p>Saved model risk assessments</p></div></div>
               <RiskDistribution data={metrics.risk_distribution} />
-              <div className="demo-banner">Demo heuristic results are illustrative, not model predictions.</div>
+              <div className="demo-banner">PaySim-based estimates are illustrative, not production validated.</div>
+            </article>
+          </div>
+          <div className="panel-grid dashboard-live-grid">
+            <article className="panel">
+              <div className="panel-heading"><div><h2>Recent live transactions</h2><p>External and simulator events · latest 5</p></div></div>
+              <div className="feed-list">
+                {liveTransactions.map((transaction) => {
+                  const classification = transaction.risk_assessment?.model_classification;
+                  return <div className="feed-item" key={transaction.id}>
+                    <div className="feed-main"><strong className="mono">{transaction.transaction_id}</strong><span>{amount(transaction.amount)} · {transaction.transaction_type}</span></div>
+                    <div className="feed-meta"><span>{transaction.source} · {displayDate(transaction.created_at)}</span><span className={`status-pill ${classification === "fraud" ? "danger" : "neutral"}`}>{classification === "fraud" ? "Likely fraudulent" : classification === "legitimate" ? "Likely legitimate" : transaction.risk_assessment ? "Unavailable" : "Not assessed"}</span></div>
+                  </div>;
+                })}
+                {!liveTransactions.length && <div className="empty-state">No live external or simulator events yet.</div>}
+              </div>
+            </article>
+            <article className="panel">
+              <div className="panel-heading"><div><h2>Recent alerts</h2><p>High-risk assessments requiring analyst review</p></div></div>
+              <div className="feed-list">
+                {alerts.map((alert) => <div className="feed-item" key={alert.id}>
+                  <div className="feed-main"><strong>{alert.title}</strong><span>{alert.transaction_ref} · {amount(alert.amount)}</span></div>
+                  <p className="feed-explanation">{alert.explanation?.split("\n")[0] || "Risk assessment explanation unavailable."}</p>
+                  <div className="feed-meta"><span>{alert.status} · {displayDate(alert.created_at)}</span>
+                    {alert.status === "open" && <button className="button secondary small-button" onClick={() => updateAlert(alert.id, "acknowledged")}>Acknowledge</button>}
+                    {alert.status === "acknowledged" && <button className="button secondary small-button" onClick={() => updateAlert(alert.id, "resolved")}>Resolve</button>}
+                  </div>
+                </div>)}
+                {!alerts.length && <div className="empty-state">No alerts yet. High-risk assessments will appear here.</div>}
+              </div>
             </article>
           </div>
         </>}
@@ -193,15 +331,16 @@ function TransactionsPage({ goToRisk }) {
           <label className="search-field"><span>Search</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Transaction or account ID" /></label>
           <label className="select-field"><span>Type</span><select value={type} onChange={(event) => setType(event.target.value)}><option value="">All types</option><option>TRANSFER</option><option>CASH_OUT</option><option>PAYMENT</option><option>CASH_IN</option><option>DEBIT</option></select></label>
           <label className="select-field"><span>Risk</span><select value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)}><option value="">All risk levels</option><option value="high">High risk</option><option value="medium">Medium risk</option><option value="low">Low risk</option></select></label>
-          <label className="select-field"><span>Fraud label</span><select value={fraudOnly} onChange={(event) => setFraudOnly(event.target.value)}><option value="">All labels</option><option value="true">Fraud only</option><option value="false">Non-fraud only</option></select></label>
+          <label className="select-field"><span>Ground-truth label</span><select value={fraudOnly} onChange={(event) => setFraudOnly(event.target.value)}><option value="">All labels</option><option value="true">Fraud only</option><option value="false">Legitimate only</option></select></label>
           <span className="row-count">{rows.length} shown · up to 50</span>
         </div>
         <Message loading={loading}>
-          <div className="table-scroll"><table><thead><tr><th>Transaction</th><th>Type</th><th>Amount</th><th>Sender</th><th>Receiver</th><th>Label</th><th /></tr></thead>
+          <div className="table-scroll"><table><thead><tr><th>Transaction</th><th>Type</th><th>Amount</th><th>Sender</th><th>Receiver</th><th>Ground truth</th><th>Model estimate</th><th /></tr></thead>
             <tbody>{rows.map((row) => <tr key={row.id} onClick={() => setSelected(row.id)} className="clickable-row">
               <td className="mono">{row.transaction_id}</td><td><span className="type-pill">{row.transaction_type}</span></td><td>{amount(row.amount)}</td>
               <td className="mono truncate">{row.name_orig || "—"}</td><td className="mono truncate">{row.name_dest || "—"}</td>
-              <td><span className={`status-pill ${row.is_fraud ? "danger" : "neutral"}`}>{row.is_fraud ? "Fraud label" : "No label"}</span></td><td className="arrow">›</td>
+              <td><span className={`status-pill ${row.label_known && row.is_fraud ? "danger" : "neutral"}`}>{row.label_known ? row.is_fraud ? "Fraud" : "Legitimate" : "Unknown"}</span></td>
+              <td><span className={`status-pill ${row.risk_assessment?.model_classification === "fraud" ? "danger" : "neutral"}`}>{row.risk_assessment ? row.risk_assessment.model_classification === "fraud" ? "Likely fraudulent" : row.risk_assessment.model_classification === "legitimate" ? "Likely legitimate" : "Unavailable" : "Not assessed"}</span></td><td className="arrow">›</td>
             </tr>)}</tbody>
           </table></div>
           {!rows.length && <div className="empty-state">No transactions found. Upload a CSV to get started.</div>}
@@ -211,8 +350,8 @@ function TransactionsPage({ goToRisk }) {
         <article className="modal panel">
           <div className="modal-head"><div><p className="eyebrow">TRANSACTION DETAIL</p><h2>{detail?.transaction_id || "Loading…"}</h2></div><button className="icon-button" onClick={() => { setSelected(null); setDetail(null); }} aria-label="Close details">×</button></div>
           {detail && <>
-            <div className="detail-grid"><div><small>Type</small><strong>{detail.transaction_type}</strong></div><div><small>Amount</small><strong>{amount(detail.amount)}</strong></div><div><small>Sender</small><strong className="mono">{detail.name_orig || "—"}</strong></div><div><small>Receiver</small><strong className="mono">{detail.name_dest || "—"}</strong></div><div><small>Fraud label</small><strong>{detail.is_fraud ? "Yes" : "No"}</strong></div><div><small>Recorded</small><strong>{displayDate(detail.created_at)}</strong></div></div>
-            {detail.risk_assessment && <div className="inline-risk">Saved risk assessment: <strong>{detail.risk_assessment.risk_level}</strong> · {detail.risk_assessment.overall_risk_score}/100</div>}
+            <div className="detail-grid"><div><small>Type</small><strong>{detail.transaction_type}</strong></div><div><small>Amount</small><strong>{amount(detail.amount)}</strong></div><div><small>Sender</small><strong className="mono">{detail.name_orig || "—"}</strong></div><div><small>Receiver</small><strong className="mono">{detail.name_dest || "—"}</strong></div><div><small>Ground-truth label</small><strong>{detail.label_known ? detail.is_fraud ? "Fraud" : "Legitimate" : "Unknown"}</strong></div><div><small>Recorded</small><strong>{displayDate(detail.created_at)}</strong></div></div>
+            {detail.risk_assessment && <div className="inline-risk">Model estimate: <strong>{detail.risk_assessment.model_classification === "fraud" ? "Likely fraudulent" : detail.risk_assessment.model_classification === "legitimate" ? "Likely legitimate" : "Unavailable"}</strong> · {percentage(detail.risk_assessment.fraud_probability)} fraud probability · {detail.risk_assessment.risk_level} risk</div>}
             <div className="modal-actions"><button className="button primary" onClick={() => goToRisk(selected)}>Open risk analysis</button><button className="button secondary" onClick={() => setSelected(null)}>Close</button></div>
           </>}
         </article>
@@ -225,6 +364,7 @@ function RiskPage({ initialTransaction }) {
   const [rows, setRows] = useState([]);
   const [selected, setSelected] = useState("");
   const [risk, setRisk] = useState(null);
+  const [batchResult, setBatchResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
@@ -246,22 +386,35 @@ function RiskPage({ initialTransaction }) {
       setAnalyzing(false);
     }
   }
+  async function analyzeBatch() {
+    setAnalyzing(true);
+    setError("");
+    setBatchResult(null);
+    try {
+      setBatchResult(await api.analyzeBatch(100));
+      setRows(await api.transactions({ limit: 100 }));
+    } catch (reason) {
+      setError(reason.message);
+    } finally {
+      setAnalyzing(false);
+    }
+  }
   return (
     <section>
       <PageTitle eyebrow="DECISION SUPPORT" title="Risk analysis" detail="Inspect risk signals and recommended review actions for a transaction." />
-      <div className="demo-banner prominent">Sample scoring only — demo heuristic, not a trained or calibrated fraud model.</div>
-      <div className="panel analysis-picker"><label className="select-field"><span>Transaction</span><select value={selected} onChange={(event) => { setSelected(event.target.value); setRisk(null); }}><option value="">Choose transaction</option>{rows.map((row) => <option key={row.id} value={row.id}>{row.transaction_id} · {row.transaction_type} · {amount(row.amount)}</option>)}</select></label><button className="button primary" onClick={analyze} disabled={!selected || analyzing}>{analyzing ? "Analyzing…" : "Run demo analysis"}</button></div>
+      <div className="demo-banner prominent">Trained and evaluated on synthetic PaySim data. Estimates are illustrative and are not production validated.</div>
+      <div className="panel analysis-picker"><label className="select-field"><span>Transaction</span><select value={selected} onChange={(event) => { setSelected(event.target.value); setRisk(null); }}><option value="">Choose transaction</option>{rows.map((row) => <option key={row.id} value={row.id}>{row.transaction_id} · {row.transaction_type} · {amount(row.amount)}</option>)}</select></label><button className="button primary" onClick={analyze} disabled={!selected || analyzing}>{analyzing ? "Analyzing…" : "Run model analysis"}</button><button className="button" onClick={analyzeBatch} disabled={analyzing}>{analyzing ? "Analyzing…" : "Analyze pending CSV records"}</button></div>
+      {batchResult && <div className="message">Analyzed {batchResult.analyzed} pending historical CSV transaction(s). Model results remain separate from known CSV labels.</div>}
       {loading && <div className="message"><span className="spinner" /> Loading transactions…</div>}
       {error && <div className="message error-message" role="alert">{error}</div>}
       {!loading && !rows.length && <div className="empty-state panel">Upload transactions before running risk analysis.</div>}
       {risk && <div className="panel risk-result">
         <div className="risk-score-head"><div><p className="eyebrow">OVERALL RISK SCORE</p><div className={`score-value ${risk.risk_level}`}>{risk.overall_risk_score}<span>/100</span></div></div><span className={`status-pill ${risk.risk_level}`}>{risk.risk_level} risk</span></div>
+        <div className="inline-risk">Model classification: <strong>{risk.model_classification === "fraud" ? "Likely fraudulent" : risk.model_classification === "legitimate" ? "Likely legitimate" : "Unavailable"}</strong> · Decision threshold: {percentage(risk.classification_threshold)}</div>
         <div className="score-grid">
-          <ScoreBar label="Fraud probability" value={risk.fraud_probability * 100} display={percentage(risk.fraud_probability)} />
-          <ScoreBar label="Anomaly score" value={risk.anomaly_score * 100} display={percentage(risk.anomaly_score)} />
-          <ScoreBar label="Graph risk" value={risk.graph_risk * 100} display={percentage(risk.graph_risk)} />
+          <ScoreBar label="Calibrated fraud probability" value={risk.fraud_probability * 100} display={percentage(risk.fraud_probability)} />
         </div>
-        <div className="explanation-box"><h3>Risk explanation</h3><p>{risk.explanation}</p><h3>Recommended action</h3><p>{risk.recommended_action}</p></div>
+        <div className="explanation-box"><h3>Risk explanation</h3><p>{risk.explanation}</p><h3>Independent anomaly signal</h3><p>{risk.anomaly_status === "available" ? `${(risk.anomaly_score * 100).toFixed(1)}% anomaly score. ${risk.anomaly_reason}` : risk.anomaly_reason}</p><h3>Sender behavior</h3><p>{risk.behavior_findings.length ? risk.behavior_findings.join(" ") : risk.behavior_status === "available" ? "No sender amount deviation met the documented 5x-median review threshold." : "Insufficient sender history for a behavioral comparison; this is not itself a risk signal."}</p><h3>Recommended action</h3><p>{risk.recommended_action}</p></div>
         <small className="model-footnote">Analysis source: {risk.model_version} · {displayDate(risk.assessed_at)}</small>
       </div>}
     </section>
@@ -274,6 +427,7 @@ function ScoreBar({ label, value, display }) {
 
 function NetworkPage() {
   const [accountId, setAccountId] = useState("");
+  const [depth, setDepth] = useState("1");
   const [graph, setGraph] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -283,7 +437,7 @@ function NetworkPage() {
     setLoading(true);
     setError("");
     try {
-      setGraph(await api.network(accountId.trim()));
+      setGraph(await api.network(accountId.trim(), Number(depth)));
     } catch (reason) {
       setError(reason.message);
     } finally {
@@ -296,20 +450,29 @@ function NetworkPage() {
     const angle = (2 * Math.PI * index) / Math.max(nodes.length, 1) - Math.PI / 2;
     return { ...node, x: center.x + 150 * Math.cos(angle), y: center.y + 110 * Math.sin(angle) };
   }), [nodes]);
+  const positionMap = useMemo(() => Object.fromEntries([
+    [graph?.account_id, center],
+    ...positions.map(node => [node.account_id, node]),
+  ]), [graph?.account_id, positions]);
   return (
     <section>
       <PageTitle eyebrow="RELATIONSHIP INTELLIGENCE" title="Account network" detail="Explore sender and receiver links across uploaded transactions." />
-      <form className="panel network-search" onSubmit={search}><label className="search-field"><span>Account ID</span><input value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="For example, an account from your dataset" /></label><button className="button primary" disabled={loading}>{loading ? "Searching…" : "Analyze network"}</button></form>
+      <form className="panel network-search" onSubmit={search}><label className="search-field"><span>Account ID</span><input value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder="For example, an account from your dataset" /></label><label>Relationship depth<select value={depth} onChange={event => setDepth(event.target.value)}><option value="1">Direct connections</option><option value="2">2-hop network</option><option value="3">3-hop network</option></select></label><button className="button primary" disabled={loading}>{loading ? "Searching…" : "Analyze network"}</button></form>
       {error && <div className="message error-message" role="alert">{error}</div>}
       {graph && <>
-        <div className="stat-grid network-stats"><StatCard label="Connected transactions" value={graph.transaction_count} caption="Direct sender/receiver links" /><StatCard label="Connected accounts" value={nodes.length} caption="Distinct counterparties" accent="cyan" /><StatCard label="Suspicious connections" value={graph.suspicious_connections} caption="Fraud label or high demo score" accent="orange" /></div>
-        <div className="panel network-panel"><div className="panel-heading"><div><h2>Network visualization</h2><p>{graph.truncated ? "Showing the most recent 200 transactions." : "Direct account connections from the dataset."}</p></div></div>
+        <div className="stat-grid network-stats"><StatCard label="Connected transactions" value={graph.transaction_count} caption={`${graph.depth}-hop transaction paths`} /><StatCard label="Connected accounts" value={nodes.length} caption="Distinct counterparties" accent="cyan" /><StatCard label="Suspicious connections" value={graph.suspicious_connections} caption="Fraud label or high demo score" accent="orange" /></div>
+        <div className="panel network-panel"><div className="panel-heading"><div><h2>Network visualization</h2><p>{graph.truncated ? "Showing a capped sample of recent transactions." : `Network paths up to ${graph.depth} hop(s) from the dataset.`}</p></div></div>
           {nodes.length ? <svg className="network-svg" viewBox="0 0 500 340" role="img" aria-label={`Account network centered on ${graph.account_id}`}>
-            {positions.map((node) => <line key={`line-${node.account_id}`} x1={center.x} y1={center.y} x2={node.x} y2={node.y} className={graph.edges.some((edge) => edge.suspicious && (edge.from === node.account_id || edge.to === node.account_id)) ? "network-edge suspicious" : "network-edge"} />)}
+            {graph.edges.map((edge) => {
+              const from = positionMap[edge.from];
+              const to = positionMap[edge.to];
+              if (!from || !to) return null;
+              return <line key={`${edge.transaction_id}-${edge.from}-${edge.to}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} className={edge.suspicious ? "network-edge suspicious" : "network-edge"}><title>{`${edge.transaction_id} · ${amount(edge.amount)} · ${edge.suspicious ? "Flagged for review" : "No high-risk flag"}`}</title></line>;
+            })}
             <circle cx={center.x} cy={center.y} r="36" className="network-node central" /><text x={center.x} y={center.y + 4} className="network-label center-label">{graph.account_id.slice(0, 12)}</text>
             {positions.map((node) => <g key={node.account_id}><circle cx={node.x} cy={node.y} r="25" className="network-node" /><text x={node.x} y={node.y + 4} className="network-label">{node.account_id.slice(0, 9)}</text></g>)}
           </svg> : <div className="empty-state">No connected accounts found for this ID.</div>}
-          <div className="connection-list">{nodes.slice(0, 8).map((node) => <div key={node.account_id}><span className="risk-dot blue-dot" /><span className="mono">{node.account_id}</span><small>{node.transaction_count} tx · {amount(node.total_amount)}</small></div>)}</div>
+          <p className="muted small">{graph.disclaimer}</p><div className="connection-list">{nodes.slice(0, 8).map((node) => <div key={node.account_id}><span className="risk-dot blue-dot" /><span className="mono">{node.account_id}</span><small>{node.transaction_count} tx · {amount(node.total_amount)}</small></div>)}</div>
         </div>
       </>}
     </section>
@@ -436,9 +599,17 @@ function ReportsPage() {
 }
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [activePage, setActivePage] = useState("dashboard");
   const [riskTransaction, setRiskTransaction] = useState("");
   const [logoData, setLogoData] = useState("");
+  useEffect(() => {
+    if (!sessionStorage.getItem("safepay_access_token")) { setAuthChecked(true); return; }
+    api.me().then(setUser).catch(() => sessionStorage.removeItem("safepay_access_token")).finally(() => setAuthChecked(true));
+  }, []);
+  if (!authChecked) return <div className="auth-loading">Loading secure workspace…</div>;
+  if (!user) return <AuthenticationPage onAuthenticated={setUser} />;
   const active = navigation.find((item) => item.id === activePage);
   function openRisk(id) {
     setRiskTransaction(String(id));
@@ -468,7 +639,7 @@ export default function App() {
         <div className="sidebar-bottom"><span className="online-dot" /><span>Monitoring workspace</span><small>SafePay · Local</small></div>
       </aside>
       <main className="main-content">
-        <header className="topbar"><div><span className="breadcrumbs">Workspace</span><span className="crumb-separator">/</span><strong>{active?.label}</strong></div><div className="user-badge"><span className="online-dot" /> Local workspace</div></header>
+        <header className="topbar"><div><span className="breadcrumbs">Workspace</span><span className="crumb-separator">/</span><strong>{active?.label}</strong></div><div className="user-badge"><span className="online-dot" /> {user.full_name} · {user.role} <button className="logout-button" onClick={() => { sessionStorage.removeItem("safepay_access_token"); setUser(null); }}>Sign out</button></div></header>
         <div className="content-area">
           {activePage === "dashboard" && <DashboardPage />}
           {activePage === "transactions" && <TransactionsPage goToRisk={openRisk} />}
@@ -479,6 +650,7 @@ export default function App() {
           <footer className="page-footer">SafePay Financial Fraud Detection Platform <span>·</span> Sample risk scores are for demonstration only</footer>
         </div>
       </main>
+      <SafePayChatbot />
     </div>
   );
 }

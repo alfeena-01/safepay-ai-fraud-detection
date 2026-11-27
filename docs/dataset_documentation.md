@@ -19,4 +19,4 @@ The upload API accepts UTF-8 CSV files up to 1 GB. Header names are case-insensi
 - Existing or repeated transaction IDs are skipped and counted.
 - Required headers must be present even if individual row values are blank.
 
-Uploaded fraud labels are ground-truth dataset fields, not model predictions. The API risk-analysis placeholder is documented separately and is not trained using those labels.
+Uploaded fraud labels are ground-truth dataset fields, not model predictions. For model training, use `isFraud` as the target; do not use `isFlaggedFraud` as a feature. The training workflow uses the labeled PaySim source CSV separately from the transaction upload API.

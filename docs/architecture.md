@@ -5,7 +5,7 @@
 - **React + Vite** (`frontend/`): six dashboard areas for overview, transaction monitoring/details, risk analysis, account networks, investigation cases, and reports.
 - **FastAPI** (`backend/app/`): REST API, request validation, CORS, and interactive OpenAPI docs.
 - **SQLAlchemy 2** (`backend/app/database/`): ORM models and session lifecycle. PostgreSQL is configured with `postgresql+psycopg`; SQLite is the local/test default.
-- **Analysis placeholder** (`backend/app/services/anomaly_detection_engine/risk_scoring.py`): deterministic demo heuristic. Replace this adapter with approved model outputs when available.
+- **Risk model** (`backend/app/services/anomaly_detection_engine/` and `backend/ml/`): chunked PaySim training, calibration, held-out evaluation, and a logistic-regression scorer with per-feature log-odds explanations.
 
 ## Request/data flow
 
@@ -20,4 +20,4 @@ The browser calls `/api/...` through the frontend API helper. FastAPI validates 
 
 ## Boundaries
 
-Authentication/authorization and production deployment controls are not implemented. Do not expose this development service to untrusted networks or use its demo risk score for operational decisions.
+The model uses transaction step, amount, balances, and transaction type; it excludes account identifiers and `isFlaggedFraud`. The threshold is chosen on a validation split, with final metrics measured on an untouched, natural-prevalence test split. PaySim is synthetic and row-random splits do not demonstrate production performance. Basic authentication is implemented with password hashing, signed expiring bearer tokens and role gates for data upload/model execution. Production deployment controls remain incomplete: add rate limiting, MFA, token revocation/rotation, audit logging, formal migrations and a security review. Do not expose this development service to untrusted networks or use its scores for operational decisions.

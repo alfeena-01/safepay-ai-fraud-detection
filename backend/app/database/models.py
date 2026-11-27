@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.connection import Base
@@ -25,8 +25,14 @@ class Transaction(Base):
     old_balance_dest: Mapped[float | None] = mapped_column(Float, nullable=True)
     new_balance_dest: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_fraud: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    label_known: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     is_flagged_fraud: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    source: Mapped[str] = mapped_column(
+        String(24), default="csv", server_default="csv", nullable=False, index=True
+    )
 
     risk_assessment: Mapped["RiskAssessment | None"] = relationship(
         back_populates="transaction", cascade="all, delete-orphan", uselist=False
@@ -40,7 +46,25 @@ class RiskAssessment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id", ondelete="CASCADE"), unique=True)
     fraud_probability: Mapped[float] = mapped_column(Float)
+    model_classification: Mapped[str] = mapped_column(
+        String(16), default="unknown", server_default="unknown"
+    )
+    classification_threshold: Mapped[float] = mapped_column(
+        Float, default=0.5, server_default="0.5"
+    )
     anomaly_score: Mapped[float] = mapped_column(Float)
+    anomaly_status: Mapped[str] = mapped_column(
+        String(24), default="unavailable", server_default="unavailable"
+    )
+    anomaly_reason: Mapped[str] = mapped_column(
+        Text, default="Not calculated.", server_default="Not calculated."
+    )
+    behavior_status: Mapped[str] = mapped_column(
+        String(24), default="unavailable", server_default="unavailable"
+    )
+    behavior_findings: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'")
+    )
     graph_risk: Mapped[float] = mapped_column(Float)
     overall_risk_score: Mapped[float] = mapped_column(Float, index=True)
     risk_level: Mapped[str] = mapped_column(String(16), index=True)
@@ -109,4 +133,15 @@ class ModelVersion(Base):
     version: Mapped[str] = mapped_column(String(64), unique=True)
     model_name: Mapped[str] = mapped_column(String(128))
     metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    full_name: Mapped[str] = mapped_column(String(160))
+    password_hash: Mapped[str] = mapped_column(String(256))
+    role: Mapped[str] = mapped_column(String(24), default="analyst")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

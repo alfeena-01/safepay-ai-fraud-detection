@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.database.connection import get_db
 from app.database.models import RiskAssessment, Transaction
+from app.services.auth_security import require_roles
 
 router = APIRouter(prefix="/dataset", tags=["dataset"])
 
@@ -39,6 +40,20 @@ def _number(row: dict[str, str], key: str, row_number: int, integer: bool = Fals
         raise HTTPException(status_code=422, detail=f"Invalid {key} value at CSV row {row_number}.") from exc
 
 
+def _fraud_label(row: dict[str, str], row_number: int) -> tuple[bool, bool]:
+    value = (row.get("isfraud") or "").strip().lower()
+    if value in MISSING_VALUES:
+        return False, False
+    if value in {"1", "true", "yes"}:
+        return True, True
+    if value in {"0", "false", "no"}:
+        return False, True
+    raise HTTPException(
+        status_code=422,
+        detail=f"Invalid isFraud label at CSV row {row_number}.",
+    )
+
+
 def _records(file: BinaryIO, upload_key: str) -> Iterator[dict]:
     file.seek(0)
     text = io.TextIOWrapper(file, encoding="utf-8-sig", newline="")
@@ -58,6 +73,7 @@ def _records(file: BinaryIO, upload_key: str) -> Iterator[dict]:
             transaction_type = (_optional_text(row.get("type")) or "UNKNOWN").upper()
             if len(transaction_type) > 32:
                 raise HTTPException(status_code=422, detail=f"Transaction type is too long at CSV row {row_number}.")
+            fraud_label, label_known = _fraud_label(row, row_number)
             yield {
                 "transaction_id": source_id,
                 "step": _number(row, "step", row_number, integer=True),
@@ -69,7 +85,8 @@ def _records(file: BinaryIO, upload_key: str) -> Iterator[dict]:
                 "name_dest": _optional_text(row.get("namedest")),
                 "old_balance_dest": _number(row, "oldbalancedest", row_number),
                 "new_balance_dest": _number(row, "newbalancedest", row_number),
-                "is_fraud": (row.get("isfraud") or "0").lower() in {"1", "true", "yes"},
+                "is_fraud": fraud_label,
+                "label_known": label_known,
                 "is_flagged_fraud": (row.get("isflaggedfraud") or "0").lower() in {"1", "true", "yes"},
             }
     except UnicodeDecodeError as exc:
@@ -101,7 +118,7 @@ def _insert_batch(db: Session, rows: list[dict]) -> tuple[int, int]:
 
 
 @router.post("/upload")
-def upload_dataset(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_dataset(file: UploadFile = File(...), db: Session = Depends(get_db), _identity: dict = Depends(require_roles("admin", "analyst"))):
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=415, detail="Upload a .csv file.")
     file.file.seek(0, io.SEEK_END)
@@ -145,12 +162,21 @@ def upload_dataset(file: UploadFile = File(...), db: Session = Depends(get_db)):
 @router.get("/summary")
 def dataset_summary(db: Session = Depends(get_db)):
     total = db.scalar(select(func.count(Transaction.id))) or 0
-    fraud_count = db.scalar(select(func.count(Transaction.id)).where(Transaction.is_fraud.is_(True))) or 0
+    labeled = db.scalar(
+        select(func.count(Transaction.id)).where(Transaction.label_known.is_(True))
+    ) or 0
+    fraud_count = db.scalar(
+        select(func.count(Transaction.id)).where(
+            Transaction.label_known.is_(True),
+            Transaction.is_fraud.is_(True),
+        )
+    ) or 0
     amount_total = db.scalar(select(func.coalesce(func.sum(Transaction.amount), 0.0))) or 0.0
     return {
         "total_transactions": total,
+        "labeled_transactions": labeled,
         "fraud_transactions": fraud_count,
-        "legitimate_transactions": total - fraud_count,
-        "fraud_rate": round(fraud_count / total, 6) if total else 0.0,
+        "legitimate_transactions": labeled - fraud_count,
+        "fraud_rate": round(fraud_count / labeled, 6) if labeled else 0.0,
         "total_amount": round(amount_total, 2),
     }
